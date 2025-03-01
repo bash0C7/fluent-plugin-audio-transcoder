@@ -7,9 +7,9 @@ Gem::Specification.new do |spec|
   spec.authors = ["bash0C7"]
   spec.email   = ["ksb.4038.nullpointer+github@gmail.com"]
 
-  spec.summary       = %q{TODO: Write a short summary, because Rubygems requires one.}
-  spec.description   = %q{TODO: Write a longer description or delete this line.}
-  spec.homepage      = "TODO: Put your gem's website or public repo URL here."
+  spec.summary       = %q{Fluentd output plugin for transcoding audio files}
+  spec.description   = %q{A Fluentd output plugin that transcodes audio files using FFMPEG for optimal speech-to-text processing}
+  spec.homepage      = "https://github.com/bash0C7/fluent-plugin-audio-transcoder"
   spec.license       = "Apache-2.0"
 
   spec.files         = Dir.chdir(__dir__) do
@@ -25,4 +25,5 @@ Gem::Specification.new do |spec|
   spec.add_development_dependency "rake", "~> 13.2.1"
   spec.add_development_dependency "test-unit", "~> 3.6.7"
   spec.add_runtime_dependency "fluentd", [">= 0.14.10", "< 2"]
+  spec.add_runtime_dependency "streamio-ffmpeg", "~> 3.0"
 end
