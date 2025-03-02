@@ -36,9 +36,6 @@ module Fluent
       def configure(conf)
         super
         
-        # Create buffer directory if it doesn't exist
-        FileUtils.mkdir_p(@buffer_path) unless Dir.exist?(@buffer_path)
-        
         # Check if FFmpeg is available
         check_ffmpeg_availability
         

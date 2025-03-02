@@ -11,9 +11,6 @@ module Fluent
           @options = options
           @log = options[:log] || Logger.new(STDERR)
           
-          # Ensure buffer path exists
-          FileUtils.mkdir_p(@options[:buffer_path]) unless Dir.exist?(@options[:buffer_path])
-          
           # Track temporary files for cleanup
           @temp_files = []
         end

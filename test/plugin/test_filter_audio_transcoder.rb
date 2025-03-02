@@ -25,6 +25,7 @@ class AudioTranscoderFilterTest < Test::Unit::TestCase
 
   CONFIG = %[
     buffer_path #{Dir.tmpdir}/fluent-plugin-audio-transcoder-test
+    tag transcoded.test
   ]
   
   DEFAULT_TAG = "test.audio"
@@ -48,6 +49,7 @@ class AudioTranscoderFilterTest < Test::Unit::TestCase
       assert_equal '192k', d.instance.output_bitrate
       assert_equal 44100, d.instance.output_sample_rate
       assert_equal 1, d.instance.output_channels
+      assert_equal "transcoded.test", d.instance.tag
     end
     
     test "custom configuration" do
@@ -238,6 +240,32 @@ class AudioTranscoderFilterTest < Test::Unit::TestCase
       
       # Should not return any records for non-existent files
       assert_equal 0, filtered_records.size
+    end
+    
+    test "check tag handling" do
+      setup_ffmpeg_skip
+      
+      custom_config = CONFIG + %[
+        tag custom.transcoded.tag
+      ]
+      
+      message = {
+        "path" => @test_audio_file,
+        "filename" => "test.wav",
+        "size" => File.size(@test_audio_file),
+        "format" => "wav",
+        "content" => File.binread(@test_audio_file)
+      }
+      
+      # Use the filter helper method
+      filtered_records = filter(custom_config, [message])
+      
+      # Verify we get a record back
+      assert_equal 1, filtered_records.size
+      
+      # 設定したtagの値をテスト
+      d = create_driver(custom_config)
+      assert_equal "custom.transcoded.tag", d.instance.tag
     end
   end
 
