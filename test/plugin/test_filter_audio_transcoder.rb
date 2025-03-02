@@ -101,7 +101,12 @@ class AudioTranscoderFilterTest < Test::Unit::TestCase
       assert_equal 1, d.events.size
       
       # Get the processed content
-      record = d.events.first['record']
+      tag, time, record = d.events.first
+      assert_equal "transcoded.#{DEFAULT_TAG}", tag
+      assert_not_nil time, "Event time should not be nil"
+      assert_not_nil record, "Event record should not be nil"
+      assert_kind_of Hash, record, "Event record should be a Hash"
+      assert_not_nil time, "Event time should not be nil"
       processed_content = record["content"]
       processed_hash = Digest::SHA256.hexdigest(processed_content)
       
@@ -141,7 +146,7 @@ class AudioTranscoderFilterTest < Test::Unit::TestCase
       # Check emitted events
       assert_equal 1, d.events.size
       
-      record = d.events.first['record']
+      tag, time, record = d.events.first
       assert_equal "transcoded.#{DEFAULT_TAG}", tag
       
       # Check that original fields are properly prefixed
@@ -173,13 +178,17 @@ class AudioTranscoderFilterTest < Test::Unit::TestCase
           "path" => @test_audio_file,
           "filename" => "test.wav",
           "size" => File.size(@test_audio_file),
-          "format" => "wav"
+          "format" => "wav",
+          "content" => File.binread(@test_audio_file) # contentフィールドを追加
         })
       end
       
       assert_equal 1, d.events.size
-      tag = d.events.first['tag']
+      tag, time, record = d.events.first # 修正: タグは配列の最初の要素
       assert_equal "custom.processed", tag
+      assert_not_nil time, "Event time should not be nil"
+      assert_not_nil record, "Event record should not be nil"
+      assert_kind_of Hash, record, "Event record should be a Hash"
     end
     
     test "with format conversion" do
@@ -196,12 +205,15 @@ class AudioTranscoderFilterTest < Test::Unit::TestCase
           "path" => @test_audio_file,
           "filename" => "test.wav",
           "size" => File.size(@test_audio_file),
-          "format" => "wav"
+          "format" => "wav",
+          "content" => File.binread(@test_audio_file) # contentフィールドを追加
         })
       end
       
       assert_equal 1, d.events.size
-      record = d.events.first['record']
+      tag, time, record = d.events.first # 修正: タグは配列の最初の要素
+      assert_equal "transcoded.#{DEFAULT_TAG}", tag
+      assert_not_nil time, "Event time should not be nil"
       assert_equal "mp3", record["format"]
       assert_equal "processed_test.mp3", record["filename"]
     end
@@ -219,12 +231,15 @@ class AudioTranscoderFilterTest < Test::Unit::TestCase
           "path" => @test_audio_file,
           "filename" => "test.wav",
           "size" => File.size(@test_audio_file),
-          "format" => "wav"
+          "format" => "wav",
+          "content" => File.binread(@test_audio_file) # contentフィールドを追加
         })
       end
       
       assert_equal 1, d.events.size
-      record = d.events.first['record']
+      tag, time, record = d.events.first # 修正: タグは配列の最初の要素
+      assert_equal "transcoded.#{DEFAULT_TAG}", tag
+      assert_not_nil time, "Event time should not be nil"
       assert_equal "volume=2.0,afftdn=nr=10:nf=-25,highpass=f=200", record["processing"]["audio_filter"]
     end
     
