@@ -2,6 +2,7 @@ require 'streamio-ffmpeg'
 require 'securerandom'
 require 'fileutils'
 require 'pathname'
+require "tempfile" 
 
 module Fluent
   module Plugin

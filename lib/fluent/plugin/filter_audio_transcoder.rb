@@ -19,10 +19,6 @@ module Fluent
       desc 'Path for temporary files'
       config_param :buffer_path, :string, default: '/tmp/fluentd-audio-transcoder'
 
-      # Output tag (default: "transcoded." + input tag)
-      desc 'Output tag'
-      config_param :tag, :string
-
       def configure(conf)
         super
         
