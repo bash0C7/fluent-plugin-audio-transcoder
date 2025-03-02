@@ -42,59 +42,32 @@ class AudioTranscoderFilterTest < Test::Unit::TestCase
   end
   
   sub_test_case "configuration" do
-    test "default configuration" do
-      d = create_driver(CONFIG)
-      assert_nil d.instance.audio_filter
-      assert_equal :same, d.instance.output_format
-      assert_equal '192k', d.instance.output_bitrate
-      assert_equal 44100, d.instance.output_sample_rate
-      assert_equal 1, d.instance.output_channels
-      assert_equal "transcoded.test", d.instance.tag
-    end
-    
     test "custom configuration" do
       custom_config = %[
-        audio_filter "volume=2.0,afftdn=nr=10:nf=-25"
-        output_format mp3
-        output_bitrate 128k
-        output_sample_rate 22050
-        output_channels 2
+        transcode_options -ac aac -vn -af loudnorm=I=-15:TP=0.0:print_format=summary
+        output_extension mp3
         buffer_path /custom/path
         tag custom_tag
       ]
       
       d = create_driver(custom_config)
-      assert_equal "volume=2.0,afftdn=nr=10:nf=-25", d.instance.audio_filter
-      assert_equal :mp3, d.instance.output_format
-      assert_equal '128k', d.instance.output_bitrate
-      assert_equal 22050, d.instance.output_sample_rate
-      assert_equal 2, d.instance.output_channels
+      assert_equal '-ac aac -vn -af loudnorm=I=-15:TP=0.0:print_format=summary', d.instance.transcode_options
+      assert_equal 'mp3', d.instance.output_extension
       assert_equal "/custom/path", d.instance.buffer_path
       assert_equal "custom_tag", d.instance.tag
     end
   end
   
   sub_test_case "filter processing" do
-    # Skip this test if FFmpeg is not available
-    def setup_ffmpeg_skip
-      begin
-        FFMPEG.ffmpeg_binary
-      rescue => e
-        omit "FFmpeg is not available: #{e.message}"
-      end
-    end
-    
-    test "content should be different after transcoding" do
-      setup_ffmpeg_skip
-      
+    test "content should be different after transcoding" do      
       # Get the hash of the original file
       original_content = File.binread(@test_audio_file)
       original_hash = Digest::SHA256.hexdigest(original_content)
       
       # Apply a simple audio filter that should change the content
       custom_config = CONFIG + %[
-        audio_filter "volume=2.0"
-        output_format mp3
+        transcode_options -c:v copy
+        output_extension mp3
       ]
       
       # Create test message
@@ -125,17 +98,14 @@ class AudioTranscoderFilterTest < Test::Unit::TestCase
         "Transcoded content should be different from original content"
       
       # Verify output record format
-      assert_equal "test.mp3", processed_record["filename"]
-      assert_equal "mp3", processed_record["format"]
+      assert_equal "test.wav.mp3", File.basename(processed_record["path"])
       assert_not_nil processed_record["size"]
       assert_equal 0, processed_record["device"]
     end
     
     test "basic audio processing" do
-      setup_ffmpeg_skip
-      
       custom_config = CONFIG + %[
-        audio_filter "volume=2.0"
+        transcode_options -c:v copy
       ]
       
       message = {
@@ -152,50 +122,19 @@ class AudioTranscoderFilterTest < Test::Unit::TestCase
       
       # Verify we get a record back
       assert_equal 1, filtered_records.size
-      
+
       record = filtered_records.first
       
       # Check the record has the correct structure
-      assert_equal "test.wav", record["filename"]
-      assert_not_nil record["path"]
+      assert_equal "test.wav.aac", File.basename(record["path"])
       assert_not_nil record["size"]
       assert_equal 0, record["device"]
-      assert_equal "wav", record["format"]
       assert_not_nil record["content"]
     end
     
-    test "with format conversion" do
-      setup_ffmpeg_skip
-      
+    test "check tag handling" do      
       custom_config = CONFIG + %[
-        audio_filter "volume=2.0"
-        output_format mp3
-      ]
-      
-      message = {
-        "path" => @test_audio_file,
-        "filename" => "test.wav",
-        "size" => File.size(@test_audio_file),
-        "device" => 0,
-        "format" => "wav",
-        "content" => File.binread(@test_audio_file)
-      }
-      
-      # Use the filter helper method
-      filtered_records = filter(custom_config, [message])
-      
-      # Verify we get a record back
-      assert_equal 1, filtered_records.size
-      
-      record = filtered_records.first
-      assert_equal "mp3", record["format"]
-      assert_equal "test.mp3", record["filename"]
-    end
-    
-    test "check tag handling" do
-      setup_ffmpeg_skip
-      
-      custom_config = CONFIG + %[
+        transcode_options -c:v copy
         tag custom.transcoded.tag
       ]
       
@@ -207,7 +146,6 @@ class AudioTranscoderFilterTest < Test::Unit::TestCase
         "format" => "wav",
         "content" => File.binread(@test_audio_file)
       }
-      
       # Use the filter helper method
       filtered_records = filter(custom_config, [message])
       
