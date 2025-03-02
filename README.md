@@ -2,7 +2,7 @@
 
 [Fluentd](https://fluentd.org/) plugin for audio transcoding and processing.
 
-This plugin processes audio files by applying various filters such as normalization, noise reduction, and format conversion, optimized for speech-to-text processing.
+This plugin processes audio files by applying various filters and format conversion, optimized for speech-to-text processing.
 
 ## Installation
 
@@ -34,21 +34,8 @@ $ bundle
 <filter audio.recording>
   @type audio_transcoder
   
-  # Processing options (all optional)
-  normalize true                  # Enable/disable volume normalization
-  normalize_level -16             # Target normalization level (dB)
-  
-  noise_reduction true            # Enable/disable noise reduction
-  noise_reduction_level 0.21      # Noise reduction strength (0.0 to 1.0)
-  
-  filter_type none                # Filter type (none/lowpass/highpass/bandpass)
-  filter_frequency 1000           # Filter frequency (Hz)
-  
-  trim_silence true               # Enable silence trimming
-  silence_threshold -60           # Silence threshold (dB)
-  
-  # Or use a custom audio filter string (FFmpeg format)
-  audio_filter "loudnorm=I=-16:TP=-1.5:LRA=11,highpass=f=60,lowpass=f=12000,equalizer=f=150:width_type=h:width=100:g=-8,equalizer=f=300:width_type=h:width=100:g=2,equalizer=f=1200:width_type=h:width=600:g=3,equalizer=f=2500:width_type=h:width=1000:g=2,equalizer=f=5000:width_type=h:width=1000:g=1,afftdn=nf=-20:nr=0.5"
+  # Audio filter string (FFmpeg format)
+  audio_filter "loudnorm=I=-16:TP=-1.5:LRA=11,highpass=f=60,lowpass=f=12000,afftdn=nf=-20:nr=0.5,silenceremove=1:0:-60dB"
   
   # Output options
   output_format same              # Output format (same/mp3/aac/wav/ogg/flac)
@@ -68,12 +55,11 @@ $ bundle
   @type audio_transcoder
   
   # Audio processing options
+  audio_filter "loudnorm=I=-16:TP=-1.5:LRA=11,highpass=f=60,lowpass=f=12000,equalizer=f=150:width_type=h:width=100:g=-8,equalizer=f=300:width_type=h:width=100:g=2,equalizer=f=1200:width_type=h:width=600:g=3,equalizer=f=2500:width_type=h:width=1000:g=2,equalizer=f=5000:width_type=h:width=1000:g=1,afftdn=nf=-20:nr=0.5"
+  
   audio_codec aac           # Audio codec (default: aac)
   audio_bitrate 192k        # Audio bitrate (default: 192k)
   audio_sample_rate 44100   # Audio sample rate (default: 44100)
-  
-  # Advanced audio filter settings
-  audio_filter loudnorm=I=-16:TP=-1.5:LRA=11,highpass=f=60,lowpass=f=12000,equalizer=f=150:width_type=h:width=100:g=-8,equalizer=f=300:width_type=h:width=100:g=2,equalizer=f=1200:width_type=h:width=600:g=3,equalizer=f=2500:width_type=h:width=1000:g=2,equalizer=f=5000:width_type=h:width=1000:g=1,afftdn=nf=-20:nr=0.5
   
   # Output settings
   tag audio.normalized      # Tag for next stage (default: audio.normalized)
@@ -183,14 +169,7 @@ Note: Original fields are preserved with an "original_" prefix, but the original
 ```
 <filter audio.recording>
   @type audio_transcoder
-  normalize true
-  normalize_level -16
-  noise_reduction true
-  noise_reduction_level 0.3
-  filter_type bandpass
-  filter_frequency 1200
-  trim_silence true
-  silence_threshold -40
+  audio_filter "loudnorm=I=-16:TP=-1.5:LRA=11,highpass=f=200,lowpass=f=3400,afftdn=nr=10:nf=-25,silenceremove=1:0:-40dB:2:0:-40dB"
   output_format wav
   output_sample_rate 16000
   output_channels 1
@@ -198,40 +177,19 @@ Note: Original fields are preserved with an "original_" prefix, but the original
 </filter>
 ```
 
-### Processing as Output Plugin
+## Audio Filter Examples
 
-```
-<source>
-  @type audio_recorder
-  device 0
-  tag audio.recording
-</source>
+Here are some examples of common audio filters you can use:
 
-<match audio.recording>
-  @type audio_transcoder
-  audio_filter "volume=2.0,highpass=f=200,afftdn=nr=10:nf=-25"
-  audio_codec aac
-  audio_bitrate 192k
-  tag audio.normalized
-</match>
+- **Volume normalization**: `loudnorm=I=-16:TP=-1.5:LRA=11`
+- **Noise reduction**: `afftdn=nr=10:nf=-25`
+- **High-pass filter** (remove low frequencies): `highpass=f=200`
+- **Low-pass filter** (remove high frequencies): `lowpass=f=3400`
+- **Band-pass filter** (keep only specific range): `bandpass=f=1000:width_type=h:width=500`
+- **Silence removal**: `silenceremove=1:0:-50dB:2:0:-50dB`
+- **Speech clarity enhancement**: `equalizer=f=1000:width_type=h:width=200:g=3,equalizer=f=3000:width_type=h:width=500:g=2`
 
-<match audio.normalized>
-  @type file
-  path /path/to/output
-  format json
-</match>
-```
-
-## Audio Filters
-
-This plugin applies the following filters by default:
-
-- `loudnorm`: Volume normalization
-- `highpass`/`lowpass`: Removal of unnecessary frequency bands
-- `equalizer`: Audio clarification (multiple equalizers combined)
-- `afftdn`: Noise reduction
-
-These filters are optimized for speech transcription, especially for Japanese speech.
+These filters can be combined by separating them with commas.
 
 ## Requirements
 
@@ -270,19 +228,10 @@ $ gem install fluent-plugin-audio-transcoder
 <filter audio.recording>
   @type audio_transcoder
   
-  # 処理オプション（すべてオプション）
-  normalize true                  # ボリュームノーマライズの有効/無効
-  normalize_level -16             # ノーマライズのターゲットレベル（dB）
+  # オーディオフィルター文字列（FFmpeg形式）
+  audio_filter "loudnorm=I=-16:TP=-1.5:LRA=11,highpass=f=60,lowpass=f=12000,afftdn=nf=-20:nr=0.5,silenceremove=1:0:-60dB"
   
-  noise_reduction true            # ノイズ除去の有効/無効
-  noise_reduction_level 0.21      # ノイズ除去の強度（0.0～1.0）
-  
-  filter_type none                # フィルタータイプ（none/lowpass/highpass/bandpass）
-  filter_frequency 1000           # フィルター周波数（Hz）
-  
-  trim_silence true               # 無音部分のトリミング
-  silence_threshold -60           # 無音判定しきい値（dB）
-  
+  # 出力オプション
   output_format same              # 出力フォーマット（same/mp3/aac/wav/ogg/flac）
   output_bitrate 192k             # 出力ビットレート
   output_sample_rate 44100        # 出力サンプルレート
@@ -299,13 +248,12 @@ $ gem install fluent-plugin-audio-transcoder
 <match audio.recording>
   @type audio_transcoder
   
-  # オプションパラメータ
-  audio_codec aac           # 音声コーデック（デフォルト: aac）
-  audio_bitrate 192k        # 音声ビットレート（デフォルト: 192k）
-  audio_sample_rate 44100   # 音声サンプルレート（デフォルト: 44100）
+  # 音声処理のオプション
+  audio_filter "loudnorm=I=-16:TP=-1.5:LRA=11,highpass=f=60,lowpass=f=12000,equalizer=f=150:width_type=h:width=100:g=-8,equalizer=f=300:width_type=h:width=100:g=2,equalizer=f=1200:width_type=h:width=600:g=3,equalizer=f=2500:width_type=h:width=1000:g=2,equalizer=f=5000:width_type=h:width=1000:g=1,afftdn=nf=-20:nr=0.5"
   
-  # 高度な音声フィルター設定
-  audio_filter loudnorm=I=-16:TP=-1.5:LRA=11,highpass=f=60,lowpass=f=12000,equalizer=f=150:width_type=h:width=100:g=-8,equalizer=f=300:width_type=h:width=100:g=2,equalizer=f=1200:width_type=h:width=600:g=3,equalizer=f=2500:width_type=h:width=1000:g=2,equalizer=f=5000:width_type=h:width=1000:g=1,afftdn=nf=-20:nr=0.5
+  audio_codec aac            # 音声コーデック（デフォルト: aac）
+  audio_bitrate 192k         # 音声ビットレート（デフォルト: 192k）
+  audio_sample_rate 44100    # 音声サンプルレート（デフォルト: 44100）
   
   # 出力設定
   tag audio.normalized      # 次のステージへのタグ（デフォルト: audio.normalized）
@@ -313,16 +261,19 @@ $ gem install fluent-plugin-audio-transcoder
 </match>
 ```
 
-## 音声フィルターについて
+## オーディオフィルターの例
 
-このプラグインはデフォルトで以下のフィルターを適用します：
+以下は、よく使われるオーディオフィルターの例です：
 
-- `loudnorm`: 音量の正規化
-- `highpass`/`lowpass`: 不要な周波数帯域の除去
-- `equalizer`: 音声の明瞭化（複数のイコライザーを組み合わせ）
-- `afftdn`: ノイズ除去
+- **音量正規化**: `loudnorm=I=-16:TP=-1.5:LRA=11`
+- **ノイズ除去**: `afftdn=nr=10:nf=-25`
+- **ハイパスフィルター**（低周波数を除去）: `highpass=f=200`
+- **ローパスフィルター**（高周波数を除去）: `lowpass=f=3400`
+- **バンドパスフィルター**（特定の周波数帯域のみを保持）: `bandpass=f=1000:width_type=h:width=500`
+- **無音除去**: `silenceremove=1:0:-50dB:2:0:-50dB`
+- **音声明瞭化**: `equalizer=f=1000:width_type=h:width=200:g=3,equalizer=f=3000:width_type=h:width=500:g=2`
 
-これらのフィルターは特に日本語の話し言葉の文字起こしに最適化されています。
+これらのフィルターはカンマで区切ることで組み合わせることができます。
 
 ## ライセンス
 

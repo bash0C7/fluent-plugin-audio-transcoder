@@ -32,55 +32,31 @@ class AudioTranscoderFilterTest < Test::Unit::TestCase
   sub_test_case "configuration" do
     test "default configuration" do
       d = create_driver(CONFIG)
-      assert_equal true, d.instance.normalize
-      assert_equal -16, d.instance.normalize_level
-      assert_equal true, d.instance.noise_reduction
-      assert_equal 0.21, d.instance.noise_reduction_level
-      assert_equal :none, d.instance.filter_type
-      assert_equal 1000, d.instance.filter_frequency
-      assert_equal true, d.instance.trim_silence
-      assert_equal -60, d.instance.silence_threshold
+      assert_nil d.instance.audio_filter
       assert_equal :same, d.instance.output_format
       assert_equal '192k', d.instance.output_bitrate
       assert_equal 44100, d.instance.output_sample_rate
       assert_equal 1, d.instance.output_channels
-      assert_nil d.instance.audio_filter
       assert_nil d.instance.tag
     end
     
     test "custom configuration" do
       custom_config = %[
-        normalize false
-        normalize_level -20
-        noise_reduction false
-        noise_reduction_level 0.5
-        filter_type bandpass
-        filter_frequency 800
-        trim_silence false
-        silence_threshold -50
+        audio_filter "volume=2.0,afftdn=nr=10:nf=-25"
         output_format mp3
         output_bitrate 128k
         output_sample_rate 22050
         output_channels 2
-        audio_filter "volume=2.0,afftdn=nr=10:nf=-25"
         buffer_path /custom/path
         tag custom.tag
       ]
       
       d = create_driver(custom_config)
-      assert_equal false, d.instance.normalize
-      assert_equal -20, d.instance.normalize_level
-      assert_equal false, d.instance.noise_reduction
-      assert_equal 0.5, d.instance.noise_reduction_level
-      assert_equal :bandpass, d.instance.filter_type
-      assert_equal 800, d.instance.filter_frequency
-      assert_equal false, d.instance.trim_silence
-      assert_equal -50, d.instance.silence_threshold
+      assert_equal "volume=2.0,afftdn=nr=10:nf=-25", d.instance.audio_filter
       assert_equal :mp3, d.instance.output_format
       assert_equal '128k', d.instance.output_bitrate
       assert_equal 22050, d.instance.output_sample_rate
       assert_equal 2, d.instance.output_channels
-      assert_equal "volume=2.0,afftdn=nr=10:nf=-25", d.instance.audio_filter
       assert_equal "/custom/path", d.instance.buffer_path
       assert_equal "custom.tag", d.instance.tag
     end
@@ -125,7 +101,7 @@ class AudioTranscoderFilterTest < Test::Unit::TestCase
       assert_equal 1, d.events.size
       
       # Get the processed content
-      tag, time, record = d.events[0]
+      record = d.events.first['record']
       processed_content = record["content"]
       processed_hash = Digest::SHA256.hexdigest(processed_content)
       
@@ -143,7 +119,11 @@ class AudioTranscoderFilterTest < Test::Unit::TestCase
     test "basic audio processing" do
       setup_ffmpeg_skip
       
-      d = create_driver(CONFIG)
+      custom_config = CONFIG + %[
+        audio_filter "volume=2.0"
+      ]
+      
+      d = create_driver(custom_config)
       d.run(default_tag: DEFAULT_TAG) do
         d.feed(time: Time.now.to_i, record: {
           "path" => @test_audio_file,
@@ -161,7 +141,7 @@ class AudioTranscoderFilterTest < Test::Unit::TestCase
       # Check emitted events
       assert_equal 1, d.events.size
       
-      tag, time, record = d.events[0]
+      record = d.events.first['record']
       assert_equal "transcoded.#{DEFAULT_TAG}", tag
       
       # Check that original fields are properly prefixed
@@ -176,12 +156,14 @@ class AudioTranscoderFilterTest < Test::Unit::TestCase
       assert_not_nil record["size"]
       assert_not_nil record["content"]
       assert_not_nil record["processing"]
+      assert_equal "volume=2.0", record["processing"]["audio_filter"]
     end
     
     test "with custom tag" do
       setup_ffmpeg_skip
       
       custom_config = CONFIG + %[
+        audio_filter "volume=2.0"
         tag custom.processed
       ]
       
@@ -196,7 +178,7 @@ class AudioTranscoderFilterTest < Test::Unit::TestCase
       end
       
       assert_equal 1, d.events.size
-      tag, time, record = d.events[0]
+      tag = d.events.first['tag']
       assert_equal "custom.processed", tag
     end
     
@@ -204,6 +186,7 @@ class AudioTranscoderFilterTest < Test::Unit::TestCase
       setup_ffmpeg_skip
       
       custom_config = CONFIG + %[
+        audio_filter "volume=2.0"
         output_format mp3
       ]
       
@@ -218,16 +201,16 @@ class AudioTranscoderFilterTest < Test::Unit::TestCase
       end
       
       assert_equal 1, d.events.size
-      tag, time, record = d.events[0]
+      record = d.events.first['record']
       assert_equal "mp3", record["format"]
       assert_equal "processed_test.mp3", record["filename"]
     end
     
-    test "with custom audio filter" do
+    test "with complex audio filter" do
       setup_ffmpeg_skip
       
       custom_config = CONFIG + %[
-        audio_filter "volume=2.0,afftdn=nr=10:nf=-25"
+        audio_filter "volume=2.0,afftdn=nr=10:nf=-25,highpass=f=200"
       ]
       
       d = create_driver(custom_config)
@@ -241,8 +224,8 @@ class AudioTranscoderFilterTest < Test::Unit::TestCase
       end
       
       assert_equal 1, d.events.size
-      tag, time, record = d.events[0]
-      assert_equal "volume=2.0,afftdn=nr=10:nf=-25", record["processing"]["audio_filter"]
+      record = d.events.first['record']
+      assert_equal "volume=2.0,afftdn=nr=10:nf=-25,highpass=f=200", record["processing"]["audio_filter"]
     end
     
     test "handling nonexistent files" do

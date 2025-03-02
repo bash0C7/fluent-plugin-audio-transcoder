@@ -9,29 +9,8 @@ module Fluent
       Fluent::Plugin.register_filter('audio_transcoder', self)
 
       # Processing options
-      desc 'Enable volume normalization'
-      config_param :normalize, :bool, default: true
-      
-      desc 'Target normalization level in dB'
-      config_param :normalize_level, :integer, default: -16
-      
-      desc 'Enable noise reduction'
-      config_param :noise_reduction, :bool, default: true
-      
-      desc 'Noise reduction level (0.0 to 1.0)'
-      config_param :noise_reduction_level, :float, default: 0.21
-      
-      desc 'Filter type (none/lowpass/highpass/bandpass)'
-      config_param :filter_type, :enum, list: [:none, :lowpass, :highpass, :bandpass], default: :none
-      
-      desc 'Filter frequency in Hz'
-      config_param :filter_frequency, :integer, default: 1000
-      
-      desc 'Enable silence trimming'
-      config_param :trim_silence, :bool, default: true
-      
-      desc 'Silence threshold in dB'
-      config_param :silence_threshold, :integer, default: -60
+      desc 'Audio filter string (FFmpeg format)'
+      config_param :audio_filter, :string, default: nil
       
       # Output format options
       desc 'Output format (same/mp3/aac/wav/ogg/flac)'
@@ -45,10 +24,6 @@ module Fluent
       
       desc 'Output channels'
       config_param :output_channels, :integer, default: 1
-      
-      # Custom audio filter (takes precedence over individual options if specified)
-      desc 'Custom audio filter string (FFmpeg format)'
-      config_param :audio_filter, :string, default: nil
       
       # Other options
       desc 'Path for temporary files'
@@ -69,19 +44,11 @@ module Fluent
         
         # Initialize processor
         @processor = AudioTranscoder::Processor.new(
-          normalize: @normalize,
-          normalize_level: @normalize_level,
-          noise_reduction: @noise_reduction,
-          noise_reduction_level: @noise_reduction_level,
-          filter_type: @filter_type,
-          filter_frequency: @filter_frequency,
-          trim_silence: @trim_silence,
-          silence_threshold: @silence_threshold,
+          audio_filter: @audio_filter,
           output_format: @output_format,
           output_bitrate: @output_bitrate,
           output_sample_rate: @output_sample_rate,
           output_channels: @output_channels,
-          audio_filter: @audio_filter,
           buffer_path: @buffer_path,
           log: log
         )
