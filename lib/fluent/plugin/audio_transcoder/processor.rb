@@ -10,26 +10,31 @@ module Fluent
         def initialize(options = {})
           @options = options
           @log = options[:log] || Logger.new(STDERR)
-          
-          # Track temporary files for cleanup
-          @temp_files = []
         end
         
         def process(record)
+          input_file = nil
+          output_path = nil
+          
           begin
             # Create temporary input file from content if available
             input_file = create_temp_input_file(record)
             return nil unless input_file
             
-            # Generate a unique name for the processed file
+            # Keep original filename but update extension if format changes
             input_filename = record['filename'] || File.basename(input_file)
             input_ext = File.extname(input_filename)
-            output_format = determine_output_format(input_filename)
-            output_filename = "processed_#{input_filename.gsub(input_ext, '')}.#{output_format}"
-            output_path = File.join(@options[:buffer_path], output_filename)
+            output_format = @options[:output_format]
             
-            # Register the output file for cleanup
-            @temp_files << output_path
+            # Generate the output filename with the same name but potentially different extension
+            output_filename = input_filename
+            if @options[:output_format] != :same
+              # Replace the extension only if format is changing
+              output_filename = input_filename.gsub(/#{input_ext}$/, ".#{output_format}")
+              output_format = (record['format'] || File.extname(input_file).delete('.')).to_sym
+            end
+            
+            output_path = File.join(@options[:buffer_path], output_filename)
             
             @log.info "Processing audio file: #{input_file} -> #{output_path}"
             
@@ -60,13 +65,20 @@ module Fluent
             success = movie.transcode(output_path, options)
             
             if success && File.exist?(output_path)
-              # Return the processed data
+              # Read the processed content
+              output_content = File.binread(output_path)
+              output_size = File.size(output_path)
+              
+              # Clean up the input temporary file immediately if it's not the original path
+              cleanup_temp_file(input_file) if input_file != record['path']
+              
+              # Clean up the output file after reading its content
               result = {
                 'path' => output_path,
                 'filename' => output_filename,
-                'size' => File.size(output_path),
+                'size' => output_size,
                 'format' => output_format,
-                'content' => File.binread(output_path),
+                'content' => output_content,
                 'processing' => {
                   'audio_filter' => audio_filter,
                   'audio_codec' => output_codec,
@@ -76,14 +88,15 @@ module Fluent
                 }
               }
               
-              # Clean up the input temporary file
-              cleanup_temp_file(input_file) if input_file != record['path']
+              # Clean up output temporary file immediately after reading its content
+              cleanup_temp_file(output_path)
               
               return result
             else
               @log.error "Transcoding failed for #{input_file}"
               # Clean up temp files on failure
               cleanup_temp_file(input_file) if input_file != record['path']
+              cleanup_temp_file(output_path) if output_path && File.exist?(output_path)
               return nil
             end
           rescue => e
@@ -91,13 +104,8 @@ module Fluent
             @log.error e.backtrace.join("\n")
             # Clean up temp files on error
             cleanup_temp_file(input_file) if input_file && input_file != record['path']
+            cleanup_temp_file(output_path) if output_path && File.exist?(output_path)
             return nil
-          end
-        end
-        
-        def cleanup
-          @temp_files.each do |file|
-            cleanup_temp_file(file)
           end
         end
         
@@ -109,9 +117,6 @@ module Fluent
             # Use record's filename if available, otherwise generate a random name
             filename = record['filename'] || "temp_audio_#{SecureRandom.uuid}"
             temp_path = File.join(@options[:buffer_path], filename)
-            
-            # Register for cleanup
-            @temp_files << temp_path
             
             @log.debug "Creating temporary file from content: #{temp_path}"
             
@@ -129,14 +134,19 @@ module Fluent
         end
         
         def cleanup_temp_file(file)
-          if File.exist?(file)
+          if file && File.exist?(file)
             @log.debug "Cleaning up temporary file: #{file}"
-            File.unlink(file) rescue nil
+            begin
+              File.unlink(file)
+              @log.debug "Successfully deleted file: #{file}"
+            rescue => e
+              @log.error "Failed to delete file #{file}: #{e.message}"
+            end
           end
         end
         
-        def determine_output_format(input_path)
-          return File.extname(input_path).delete('.') if @options[:output_format] == :same
+        def determine_output_format(input_format)
+          return input_format if @options[:output_format] == :same
           @options[:output_format].to_s
         end
         

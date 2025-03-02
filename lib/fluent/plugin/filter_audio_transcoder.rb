@@ -36,6 +36,9 @@ module Fluent
       def configure(conf)
         super
         
+        # Create buffer directory if it doesn't exist
+        FileUtils.mkdir_p(@buffer_path) unless Dir.exist?(@buffer_path)
+        
         # Initialize processor
         @processor = AudioTranscoder::Processor.new(
           audio_filter: @audio_filter,
@@ -61,60 +64,21 @@ module Fluent
       end
 
       def filter(tag, time, record)
-        # Validate record has either content or a valid path
-        unless valid_record?(record)
-          log.error "Invalid record: must have either 'content' or a valid 'path'"
-          return nil
-        end
-
-        begin
           # Process the audio file
           result = @processor.process(record)
           
-          if result
-            # Prepare new record with processed data
-            new_record = prepare_output_record(record, result)
-            
-            # Return the processed record
-            return new_record
-          else
-            log.error "Failed to process audio"
-            return nil
-          end
-        rescue => e
-          log.error "Error processing audio: #{e.class} #{e.message}"
-          log.error_backtrace(e.backtrace)
-          return nil
-        end
+          # Use the actual transcoded file path
+          record["path"] = result['path'],
+          # Use the size of the transcoded file
+          record["size"] = result['size'],
+          # Use the format used during transcoding
+          record["format"] = result['format'],
+          # Include the transcoded binary content
+          record["content"] = result['content']
+  
+          record
       end
 
-      private
-
-      def valid_record?(record)
-        return true if record['content']
-        return true if record['path'] && File.exist?(record['path'])
-        false
-      end
-
-
-
-      def prepare_output_record(original_record, result)
-        # Start with a new record with original_ prefix for all fields except content
-        new_record = {}
-        
-        # First add all original fields with prefix
-        original_record.each do |key, value|
-          next if key == 'content' # Skip content to save space
-          @tag if key == 'tag'
-          new_record["original_#{key}"] = value
-        end
-        
-        # Then add new processed data
-        new_record.merge!(result)
-        
-        # Return the new record
-        new_record
-      end
     end
   end
 end
