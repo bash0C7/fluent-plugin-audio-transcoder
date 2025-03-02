@@ -36,9 +36,6 @@ module Fluent
       def configure(conf)
         super
         
-        # Check if FFmpeg is available
-        check_ffmpeg_availability
-        
         # Initialize processor
         @processor = AudioTranscoder::Processor.new(
           audio_filter: @audio_filter,
@@ -64,9 +61,9 @@ module Fluent
       end
 
       def filter(tag, time, record)
-        input_path = record['path']
-        unless input_path && File.exist?(input_path)
-          log.error "Audio file does not exist: #{input_path}"
+        # Validate record has either content or a valid path
+        unless valid_record?(record)
+          log.error "Invalid record: must have either 'content' or a valid 'path'"
           return nil
         end
 
@@ -81,7 +78,7 @@ module Fluent
             # Return the processed record
             return new_record
           else
-            log.error "Failed to process audio file: #{input_path}"
+            log.error "Failed to process audio"
             return nil
           end
         rescue => e
@@ -93,16 +90,13 @@ module Fluent
 
       private
 
-      def check_ffmpeg_availability
-        begin
-          require 'streamio-ffmpeg'
-          FFMPEG.ffmpeg_binary
-        rescue LoadError
-          raise Fluent::ConfigError, "streamio-ffmpeg gem is not installed"
-        rescue => e
-          raise Fluent::ConfigError, "FFmpeg configuration error: #{e.message}"
-        end
+      def valid_record?(record)
+        return true if record['content']
+        return true if record['path'] && File.exist?(record['path'])
+        false
       end
+
+
 
       def prepare_output_record(original_record, result)
         # Start with a new record with original_ prefix for all fields except content

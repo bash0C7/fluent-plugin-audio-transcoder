@@ -16,23 +16,25 @@ module Fluent
         end
         
         def process(record)
-          input_path = record['path']
-          
-          # Generate a unique name for the processed file
-          input_filename = File.basename(input_path)
-          input_ext = File.extname(input_path)
-          output_format = determine_output_format(input_path)
-          output_filename = "processed_#{input_filename.gsub(input_ext, '')}.#{output_format}"
-          output_path = File.join(@options[:buffer_path], output_filename)
-          
-          # Register the output file for cleanup
-          @temp_files << output_path
-          
-          @log.info "Processing audio file: #{input_path} -> #{output_path}"
-          
           begin
+            # Create temporary input file from content if available
+            input_file = create_temp_input_file(record)
+            return nil unless input_file
+            
+            # Generate a unique name for the processed file
+            input_filename = record['filename'] || File.basename(input_file)
+            input_ext = File.extname(input_filename)
+            output_format = determine_output_format(input_filename)
+            output_filename = "processed_#{input_filename.gsub(input_ext, '')}.#{output_format}"
+            output_path = File.join(@options[:buffer_path], output_filename)
+            
+            # Register the output file for cleanup
+            @temp_files << output_path
+            
+            @log.info "Processing audio file: #{input_file} -> #{output_path}"
+            
             # Load the movie using streamio-ffmpeg
-            movie = FFMPEG::Movie.new(input_path)
+            movie = FFMPEG::Movie.new(input_file)
             
             # Get the audio filter string directly from options
             audio_filter = @options[:audio_filter]
@@ -59,7 +61,7 @@ module Fluent
             
             if success && File.exist?(output_path)
               # Return the processed data
-              {
+              result = {
                 'path' => output_path,
                 'filename' => output_filename,
                 'size' => File.size(output_path),
@@ -73,27 +75,65 @@ module Fluent
                   'audio_channels' => @options[:output_channels]
                 }
               }
+              
+              # Clean up the input temporary file
+              cleanup_temp_file(input_file) if input_file != record['path']
+              
+              return result
             else
-              @log.error "Transcoding failed for #{input_path}"
-              nil
+              @log.error "Transcoding failed for #{input_file}"
+              # Clean up temp files on failure
+              cleanup_temp_file(input_file) if input_file != record['path']
+              return nil
             end
           rescue => e
-            @log.error "Error processing #{input_path}: #{e.message}"
+            @log.error "Error processing audio: #{e.message}"
             @log.error e.backtrace.join("\n")
-            nil
+            # Clean up temp files on error
+            cleanup_temp_file(input_file) if input_file && input_file != record['path']
+            return nil
           end
         end
         
         def cleanup
           @temp_files.each do |file|
-            if File.exist?(file)
-              @log.debug "Cleaning up temporary file: #{file}"
-              File.unlink(file) rescue nil
-            end
+            cleanup_temp_file(file)
           end
         end
         
         private
+        
+        def create_temp_input_file(record)
+          # If content is available, write it to a temporary file
+          if record['content']
+            # Use record's filename if available, otherwise generate a random name
+            filename = record['filename'] || "temp_audio_#{SecureRandom.uuid}"
+            temp_path = File.join(@options[:buffer_path], filename)
+            
+            # Register for cleanup
+            @temp_files << temp_path
+            
+            @log.debug "Creating temporary file from content: #{temp_path}"
+            
+            # Write content to the temporary file
+            File.binwrite(temp_path, record['content'])
+            
+            return temp_path
+          elsif record['path'] && File.exist?(record['path'])
+            # If no content but path exists, use that path
+            return record['path']
+          else
+            @log.error "No valid content or path found in record"
+            return nil
+          end
+        end
+        
+        def cleanup_temp_file(file)
+          if File.exist?(file)
+            @log.debug "Cleaning up temporary file: #{file}"
+            File.unlink(file) rescue nil
+          end
+        end
         
         def determine_output_format(input_path)
           return File.extname(input_path).delete('.') if @options[:output_format] == :same
