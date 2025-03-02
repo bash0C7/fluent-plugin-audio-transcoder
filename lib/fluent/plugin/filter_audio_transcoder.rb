@@ -28,10 +28,10 @@ module Fluent
       # Other options
       desc 'Path for temporary files'
       config_param :buffer_path, :string, default: '/tmp/fluentd-audio-transcoder'
-      
+
       # Output tag (default: "transcoded." + input tag)
       desc 'Output tag'
-      config_param :tag, :string, default: nil
+      config_param :tag, :string
 
       def configure(conf)
         super
@@ -73,9 +73,6 @@ module Fluent
           return nil
         end
 
-        # Determine output tag if not specified
-        output_tag = @tag || "transcoded.#{tag}"
-
         begin
           # Process the audio file
           result = @processor.process(record)
@@ -84,11 +81,8 @@ module Fluent
             # Prepare new record with processed data
             new_record = prepare_output_record(record, result)
             
-            # Generate new event with processed data
-            router.emit(output_tag, time, new_record)
-            
-            # Return nil since we're manually emitting the event
-            return nil
+            # Return the processed record
+            return new_record
           else
             log.error "Failed to process audio file: #{input_path}"
             return nil
@@ -120,6 +114,7 @@ module Fluent
         # First add all original fields with prefix
         original_record.each do |key, value|
           next if key == 'content' # Skip content to save space
+          @tag if key == 'tag'
           new_record["original_#{key}"] = value
         end
         

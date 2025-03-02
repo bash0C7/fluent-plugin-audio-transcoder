@@ -29,6 +29,17 @@ class AudioTranscoderFilterTest < Test::Unit::TestCase
   
   DEFAULT_TAG = "test.audio"
   
+  # ヘルパーメソッド - 公式ドキュメントのfilterメソッドに相当
+  def filter(config, messages, tag = DEFAULT_TAG)
+    d = create_driver(config)
+    d.run(default_tag: tag) do
+      messages.each do |message|
+        d.feed(message)
+      end
+    end
+    d.filtered_records
+  end
+  
   sub_test_case "configuration" do
     test "default configuration" do
       d = create_driver(CONFIG)
@@ -37,7 +48,6 @@ class AudioTranscoderFilterTest < Test::Unit::TestCase
       assert_equal '192k', d.instance.output_bitrate
       assert_equal 44100, d.instance.output_sample_rate
       assert_equal 1, d.instance.output_channels
-      assert_nil d.instance.tag
     end
     
     test "custom configuration" do
@@ -48,7 +58,7 @@ class AudioTranscoderFilterTest < Test::Unit::TestCase
         output_sample_rate 22050
         output_channels 2
         buffer_path /custom/path
-        tag custom.tag
+        tag custom_tag
       ]
       
       d = create_driver(custom_config)
@@ -58,7 +68,7 @@ class AudioTranscoderFilterTest < Test::Unit::TestCase
       assert_equal 22050, d.instance.output_sample_rate
       assert_equal 2, d.instance.output_channels
       assert_equal "/custom/path", d.instance.buffer_path
-      assert_equal "custom.tag", d.instance.tag
+      assert_equal "custom_tag", d.instance.tag
     end
   end
   
@@ -85,29 +95,30 @@ class AudioTranscoderFilterTest < Test::Unit::TestCase
         output_format mp3
       ]
       
-      d = create_driver(custom_config)
-      d.run(default_tag: DEFAULT_TAG) do
-        d.feed(time: Time.now.to_i, record: {
+      # Create test message
+      message = {
+        time: Time.now.to_i,
+        record: {
           "path" => @test_audio_file,
           "filename" => "test.wav",
           "size" => File.size(@test_audio_file),
           "device" => 0,
           "format" => "wav",
           "content" => original_content
-        })
-      end
+        }
+      }
       
-      # Verify that an event was emitted
-      assert_equal 1, d.events.size
+      # Use the filter helper method
+      filtered_records = filter(custom_config, [message[:record]])
+      
+      # Verify that the record was processed
+      assert_equal 1, filtered_records.size
       
       # Get the processed content
-      tag, time, record = d.events.first
-      assert_equal "transcoded.#{DEFAULT_TAG}", tag
-      assert_not_nil time, "Event time should not be nil"
-      assert_not_nil record, "Event record should not be nil"
-      assert_kind_of Hash, record, "Event record should be a Hash"
-      assert_not_nil time, "Event time should not be nil"
-      processed_content = record["content"]
+      processed_record = filtered_records.first
+      assert_not_nil processed_record, "Filtered record should not be nil"
+      assert_kind_of Hash, processed_record, "Filtered record should be a Hash"
+      processed_content = processed_record["content"]
       processed_hash = Digest::SHA256.hexdigest(processed_content)
       
       # Verify that the content has changed
@@ -128,26 +139,22 @@ class AudioTranscoderFilterTest < Test::Unit::TestCase
         audio_filter "volume=2.0"
       ]
       
-      d = create_driver(custom_config)
-      d.run(default_tag: DEFAULT_TAG) do
-        d.feed(time: Time.now.to_i, record: {
-          "path" => @test_audio_file,
-          "filename" => "test.wav",
-          "size" => File.size(@test_audio_file),
-          "device" => 0,
-          "format" => "wav",
-          "content" => File.binread(@test_audio_file)
-        })
-      end
+      message = {
+        "path" => @test_audio_file,
+        "filename" => "test.wav",
+        "size" => File.size(@test_audio_file),
+        "device" => 0,
+        "format" => "wav",
+        "content" => File.binread(@test_audio_file)
+      }
       
-      # Verify that filter doesn't output events directly
-      assert_equal 0, d.filtered_records.size
+      # Use the filter helper method
+      filtered_records = filter(custom_config, [message])
       
-      # Check emitted events
-      assert_equal 1, d.events.size
+      # Verify we get a record back
+      assert_equal 1, filtered_records.size
       
-      tag, time, record = d.events.first
-      assert_equal "transcoded.#{DEFAULT_TAG}", tag
+      record = filtered_records.first
       
       # Check that original fields are properly prefixed
       assert_equal @test_audio_file, record["original_path"]
@@ -164,33 +171,6 @@ class AudioTranscoderFilterTest < Test::Unit::TestCase
       assert_equal "volume=2.0", record["processing"]["audio_filter"]
     end
     
-    test "with custom tag" do
-      setup_ffmpeg_skip
-      
-      custom_config = CONFIG + %[
-        audio_filter "volume=2.0"
-        tag custom.processed
-      ]
-      
-      d = create_driver(custom_config)
-      d.run(default_tag: DEFAULT_TAG) do
-        d.feed(time: Time.now.to_i, record: {
-          "path" => @test_audio_file,
-          "filename" => "test.wav",
-          "size" => File.size(@test_audio_file),
-          "format" => "wav",
-          "content" => File.binread(@test_audio_file) # contentフィールドを追加
-        })
-      end
-      
-      assert_equal 1, d.events.size
-      tag, time, record = d.events.first # 修正: タグは配列の最初の要素
-      assert_equal "custom.processed", tag
-      assert_not_nil time, "Event time should not be nil"
-      assert_not_nil record, "Event record should not be nil"
-      assert_kind_of Hash, record, "Event record should be a Hash"
-    end
-    
     test "with format conversion" do
       setup_ffmpeg_skip
       
@@ -199,21 +179,21 @@ class AudioTranscoderFilterTest < Test::Unit::TestCase
         output_format mp3
       ]
       
-      d = create_driver(custom_config)
-      d.run(default_tag: DEFAULT_TAG) do
-        d.feed(time: Time.now.to_i, record: {
-          "path" => @test_audio_file,
-          "filename" => "test.wav",
-          "size" => File.size(@test_audio_file),
-          "format" => "wav",
-          "content" => File.binread(@test_audio_file) # contentフィールドを追加
-        })
-      end
+      message = {
+        "path" => @test_audio_file,
+        "filename" => "test.wav",
+        "size" => File.size(@test_audio_file),
+        "format" => "wav",
+        "content" => File.binread(@test_audio_file)
+      }
       
-      assert_equal 1, d.events.size
-      tag, time, record = d.events.first # 修正: タグは配列の最初の要素
-      assert_equal "transcoded.#{DEFAULT_TAG}", tag
-      assert_not_nil time, "Event time should not be nil"
+      # Use the filter helper method
+      filtered_records = filter(custom_config, [message])
+      
+      # Verify we get a record back
+      assert_equal 1, filtered_records.size
+      
+      record = filtered_records.first
       assert_equal "mp3", record["format"]
       assert_equal "processed_test.mp3", record["filename"]
     end
@@ -225,37 +205,39 @@ class AudioTranscoderFilterTest < Test::Unit::TestCase
         audio_filter "volume=2.0,afftdn=nr=10:nf=-25,highpass=f=200"
       ]
       
-      d = create_driver(custom_config)
-      d.run(default_tag: DEFAULT_TAG) do
-        d.feed(time: Time.now.to_i, record: {
-          "path" => @test_audio_file,
-          "filename" => "test.wav",
-          "size" => File.size(@test_audio_file),
-          "format" => "wav",
-          "content" => File.binread(@test_audio_file) # contentフィールドを追加
-        })
-      end
+      message = {
+        "path" => @test_audio_file,
+        "filename" => "test.wav",
+        "size" => File.size(@test_audio_file),
+        "format" => "wav",
+        "content" => File.binread(@test_audio_file)
+      }
       
-      assert_equal 1, d.events.size
-      tag, time, record = d.events.first # 修正: タグは配列の最初の要素
-      assert_equal "transcoded.#{DEFAULT_TAG}", tag
-      assert_not_nil time, "Event time should not be nil"
+      # Use the filter helper method
+      filtered_records = filter(custom_config, [message])
+      
+      # Verify we get a record back
+      assert_equal 1, filtered_records.size
+      
+      record = filtered_records.first
       assert_equal "volume=2.0,afftdn=nr=10:nf=-25,highpass=f=200", record["processing"]["audio_filter"]
     end
     
     test "handling nonexistent files" do
-      d = create_driver(CONFIG)
-      d.run(default_tag: DEFAULT_TAG) do
-        d.feed(time: Time.now.to_i, record: {
+      messages = [
+        {
           "path" => "/nonexistent/path.wav",
           "filename" => "test.wav",
           "size" => 10000,
           "format" => "wav"
-        })
-      end
+        }
+      ]
       
-      # Should not emit any events for non-existent files
-      assert_equal 0, d.events.size
+      # Use the filter helper method
+      filtered_records = filter(CONFIG, messages)
+      
+      # Should not return any records for non-existent files
+      assert_equal 0, filtered_records.size
     end
   end
 
