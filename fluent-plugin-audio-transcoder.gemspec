@@ -7,8 +7,8 @@ Gem::Specification.new do |spec|
   spec.authors = ["bash0C7"]
   spec.email   = ["ksb.4038.nullpointer+github@gmail.com"]
 
-  spec.summary       = %q{Fluentd output plugin for transcoding audio files}
-  spec.description   = %q{A Fluentd output plugin that transcodes audio files using FFMPEG for optimal speech-to-text processing}
+  spec.summary       = %q{Fluentd filter plugin for transcoding audio files}
+  spec.description   = %q{A Fluentd filter plugin that transcodes audio files using FFMPEG for optimal speech-to-text processing}
   spec.homepage      = "https://github.com/bash0C7/fluent-plugin-audio-transcoder"
   spec.license       = "Apache-2.0"
 

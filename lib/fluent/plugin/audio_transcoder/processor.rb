@@ -35,7 +35,7 @@ module Fluent
               'content' => File.binread(output_path)
             }
           else
-            Exception.new("Transcoding failed for #{input_file}")
+            raise Exception.new("Transcoding failed for #{input_file}")
           end
           result
         ensure
