@@ -1,8 +1,5 @@
 require 'streamio-ffmpeg'
-require 'securerandom'
 require 'fileutils'
-require 'pathname'
-require "tempfile" 
 
 module Fluent
   module Plugin
@@ -15,30 +12,28 @@ module Fluent
         end
         
         def process(record_path, record_content)
-          result = nil
           input_file = File.join(@buffer_path, File.basename(record_path))
           output_path = File.join(@buffer_path, "#{File.basename(record_path)}.#{@output_extension}")
 
-          # Write content to the temporary file
+          # Write content to temporary file
           File.binwrite(input_file, record_content)
-          # Load the movie using streamio-ffmpeg
+          
+          # Transcode the audio file
           movie = FFMPEG::Movie.new(input_file)
+          options = @transcode_options.split(' ')
+          success = movie.transcode(output_path, options)
           
-          # Perform the transcoding
-          success = movie.transcode(output_path, @transcode_options.split(' '))
-          
-          if success && File.exist?(output_path)
-            # Clean up the output file after reading its content
-            result = {
-              'path' => output_path,
-              'size' => File.size(output_path),
-              'content' => File.binread(output_path)
-            }
-          else
-            raise Exception.new("Transcoding failed for #{input_file}")
+          unless success && File.exist?(output_path)
+            raise "Transcoding failed for #{input_file}"
           end
-          result
+          
+          {
+            'path' => output_path,
+            'size' => File.size(output_path),
+            'content' => File.binread(output_path)
+          }
         ensure
+          # Clean up temporary input file
           File.unlink(input_file) if File.exist?(input_file)
         end
       end
