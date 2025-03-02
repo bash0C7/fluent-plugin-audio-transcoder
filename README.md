@@ -1,30 +1,111 @@
-emitされた録音ファイルのバイナリーをconfで指定したパラメーターを使ってtranscodeして再emitするfluent filter pluginです。
+# fluent-plugin-audio-transcoder
 
-# transcodeする
-前のステップからの前提としている項目：
-- path 録音ファイルのフルパス（ファイル名として使う）
-- content 録音ファイルの内容のバイナリー
+[Fluentd](https://fluentd.org/) filter plugin to transcode audio files using FFmpeg.
 
-次のステップに渡すもの
-- path transcode済み録音ファイルのフルパス
-- content transcode済み録音ファイルの内容のバイナリー
-- size 録音ファイルの内容のバイナリーのサイズ(バイト数)
+## Overview
 
+This plugin transcodes audio binary content according to specified parameters and re-emits the processed content. It uses FFmpeg for audio transcoding, allowing for volume normalization and format conversion to optimize files for speech-to-text processing.
 
-# Configuration
+## Installation
 
-- transcode_options: ffmpegに渡すtranscodeオプション(任意)
-  - '-c:v copy -af loudnorm=I=-14:TP=0.0:print_format=summary' みたいなコマンドラインに渡す書き方
-- output_extension(任意) 録音ファイルにつける拡張子
-  - transcodeオプションの形式とあわせてください
-- buffer_path
-  - 実体のファイルを置いておく場所。バッファ扱い。この先の処理では使わないため適宜消すこと。
+### Requirements
 
-※一般的なfilterプラグインのためtagを操作する機能はない
+- Ruby 3.4.1 or higher
+- FFmpeg installed and accessible in the system path
+- Fluentd v0.14.10 or higher
 
-# Rubyコード記述ルール
+### RubyGems
 
-- コメントやメッセージは英語で統一
-- READMEも英語で書く
-- Ruby 3.4系を使うRubyプログラマーの一般的な書き方にする
-- buffer_pathや依存ライブラリなどはすでにあるものとしてチェックや自動生成の処理は行わない
+```
+$ gem install fluent-plugin-audio-transcoder
+```
+
+### Bundler
+
+Add the following line to your Gemfile:
+
+```ruby
+gem 'fluent-plugin-audio-transcoder'
+```
+
+And then execute:
+
+```
+$ bundle
+```
+
+## Configuration
+
+### Filter Configuration
+
+```
+<filter your.tag.here>
+  @type audio_transcoder
+  
+  # FFmpeg transcoding options (optional)
+  transcode_options -c:v copy -af loudnorm=I=-14:TP=0.0:print_format=summary
+  
+  # Output file extension (optional)
+  output_extension aac
+  
+  # Path for temporary buffer files
+  buffer_path /path/to/buffer/directory
+</filter>
+```
+
+### Parameters
+
+| Parameter | Type | Description | Default |
+|-----------|------|-------------|---------|
+| transcode_options | string | FFmpeg command-line options for transcoding including filters | -c:v copy -af loudnorm=I=-14:TP=0.0:print_format=summary |
+| output_extension | string | File extension for the transcoded file | aac |
+| buffer_path | string | Path for temporary files used during transcoding | /tmp/fluentd-audio-transcoder |
+
+## Input/Output
+
+### Input Record Fields
+
+The plugin expects the following fields in the incoming record:
+
+- **path**: Full path to the audio file (used for filename)
+- **content**: Binary content of the audio file
+
+### Output Record Fields
+
+The plugin modifies the following fields in the output record:
+
+- **path**: Full path to the transcoded audio file
+- **content**: Binary content of the transcoded audio file
+- **size**: Size of the transcoded audio file in bytes
+
+Other fields in the record remain unchanged.
+
+## Example
+
+```
+<filter audio.**>
+  @type audio_transcoder
+  transcode_options -c:v copy -af loudnorm=I=-16:TP=-1.5:print_format=summary
+  output_extension mp3
+  buffer_path /var/log/fluentd/audio_buffer
+</filter>
+```
+
+This configuration will normalize the audio volume to -16 LUFS and convert it to MP3 format.
+
+## Note
+
+- The plugin creates temporary files in the specified buffer_path during processing. These files are not automatically deleted after processing and should be managed separately if needed.
+- This plugin does not modify the tag of events as it follows the standard filter plugin behavior.
+
+## Development
+
+After checking out the repo, run `bundle install` to install dependencies. Then, run `rake test` to run the tests.
+
+## Contributing
+
+Bug reports and pull requests are welcome on GitHub at https://github.com/bash0C7/fluent-plugin-audio-transcoder.
+
+## License
+
+The gem is available as open source under the terms of the [Apache-2.0 License](https://opensource.org/licenses/Apache-2.0).

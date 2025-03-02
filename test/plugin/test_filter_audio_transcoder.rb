@@ -25,7 +25,6 @@ class AudioTranscoderFilterTest < Test::Unit::TestCase
 
   CONFIG = %[
     buffer_path #{Dir.tmpdir}/fluent-plugin-audio-transcoder-test
-    tag transcoded.test
   ]
   
   DEFAULT_TAG = "test.audio"
@@ -47,14 +46,12 @@ class AudioTranscoderFilterTest < Test::Unit::TestCase
         transcode_options -ac aac -vn -af loudnorm=I=-15:TP=0.0:print_format=summary
         output_extension mp3
         buffer_path /custom/path
-        tag custom_tag
       ]
       
       d = create_driver(custom_config)
       assert_equal '-ac aac -vn -af loudnorm=I=-15:TP=0.0:print_format=summary', d.instance.transcode_options
       assert_equal 'mp3', d.instance.output_extension
       assert_equal "/custom/path", d.instance.buffer_path
-      assert_equal "custom_tag", d.instance.tag
     end
   end
   
@@ -130,31 +127,6 @@ class AudioTranscoderFilterTest < Test::Unit::TestCase
       assert_not_nil record["size"]
       assert_equal 0, record["device"]
       assert_not_nil record["content"]
-    end
-    
-    test "check tag handling" do      
-      custom_config = CONFIG + %[
-        transcode_options -c:v copy
-        tag custom.transcoded.tag
-      ]
-      
-      message = {
-        "path" => @test_audio_file,
-        "filename" => "test.wav",
-        "size" => File.size(@test_audio_file),
-        "device" => 0,
-        "format" => "wav",
-        "content" => File.binread(@test_audio_file)
-      }
-      # Use the filter helper method
-      filtered_records = filter(custom_config, [message])
-      
-      # Verify we get a record back
-      assert_equal 1, filtered_records.size
-      
-      # Set tag value test
-      d = create_driver(custom_config)
-      assert_equal "custom.transcoded.tag", d.instance.tag
     end
   end
 
