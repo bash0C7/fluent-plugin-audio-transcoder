@@ -22,11 +22,13 @@ module Fluent
       end
 
       def filter(tag, time, record)
+        log.debug "#{self.class.name}\##{__method__} start" 
         result = @processor.process(record['path'], record['content'])
 
         record["path"] = result['path']
         record["size"] = result['size']
         record["content"] = result['content']
+        log.debug "#{self.class.name}\##{__method__} loop end" 
 
         record
       end
