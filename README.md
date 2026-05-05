@@ -1,3 +1,5 @@
+> **Archived 2026-05-06.** Replaced by [bash0C7/fluentd-audio-transcription-system](https://github.com/bash0C7/fluentd-audio-transcription-system).
+
 # fluent-plugin-audio-transcoder
 
 [Fluentd](https://fluentd.org/) filter plugin to transcode audio files using FFmpeg.
